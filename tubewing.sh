@@ -40,6 +40,35 @@ cmd_install() {
     say "  sh tubewing.sh run        (or from the Pi App Store)"
 }
 
+conf_dir() { printf '%s' "${TUBEWING_HOME:-$HOME/.config}/tubewing"; }
+conf_file() { printf '%s/config' "$(conf_dir)"; }
+
+conf_input() {
+    [ -r "$(conf_file)" ] && sed -n 's/^input=//p' "$(conf_file)" | head -1 || true
+}
+
+cmd_setup() {
+    say "tubewing setup"
+    say "What will you use to control it?"
+    say "  1) Mouse     - pointer cursor you click"
+    say "  2) Keyboard  - arrow keys + Enter (uses YouTube's TV layout)"
+    say "  3) Touchpad  - pointer cursor you click"
+    printf 'Choose [1]: '
+    read -r ans || ans=1
+    case "$ans" in
+        2|keyboard) INPUT=keyboard ;;
+        3|touchpad) INPUT=touchpad ;;
+        *) INPUT=mouse ;;
+    esac
+    if [ "$DRY" = 1 ]; then
+        say "  plan: save input=$INPUT to $(conf_file)"
+    else
+        mkdir -p "$(conf_dir)"
+        printf 'input=%s\n' "$INPUT" > "$(conf_file)"
+        say "Saved: $INPUT (change any time: sh tubewing.sh setup)"
+    fi
+}
+
 cmd_run() {
     URL=$URL_MAIN
     [ "${1:-}" = "--tv" ] && URL=$URL_TV
@@ -57,6 +86,22 @@ cmd_run() {
         say "You are on SSH. tubewing draws on the Pi's own screen, so run it there."
         say "On the Pi: sh tubewing.sh run"
         exit 1
+    fi
+    INPUT=$(conf_input)
+    if [ -z "$INPUT" ]; then
+        if [ -t 0 ]; then
+            cmd_setup
+            [ -n "$INPUT" ] || INPUT=mouse
+        else
+            INPUT=mouse
+            say "No input chosen yet - defaulting to mouse. Change with: sh tubewing.sh setup"
+        fi
+    fi
+    if [ "$INPUT" = "keyboard" ] && [ "${1:-}" != "--tv" ]; then
+        URL=$URL_TV
+        say "Keyboard mode: arrows move, Enter clicks, Esc goes back."
+    else
+        say "Pointer mode ($INPUT): move and click as usual."
     fi
     export XCURSOR_THEME=Adwaita
     export XCURSOR_SIZE=24
@@ -95,13 +140,16 @@ cmd_status() {
     else
         say "installed: no (run: sh tubewing.sh install)"
     fi
+    inp=$(conf_input)
+    [ -n "$inp" ] && say "input: $inp" || say "input: not chosen yet (first run will ask)"
     say "run: sh tubewing.sh run  (full site)  |  sh tubewing.sh run --tv  (TV layout)"
 }
 
 case "${1:-status}" in
     install) cmd_install ;;
     run) shift || true; cmd_run "$@" ;;
+    setup) cmd_setup ;;
     uninstall) cmd_uninstall ;;
     status) cmd_status ;;
-    *) say "Use: sh tubewing.sh [--dry-run] install|run [--tv]|uninstall|status"; exit 1 ;;
+    *) say "Use: sh tubewing.sh [--dry-run] install|run [--tv]|setup|uninstall|status"; exit 1 ;;
 esac
