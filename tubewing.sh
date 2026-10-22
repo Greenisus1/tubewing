@@ -25,16 +25,16 @@ cmd_install() {
     say "This is a big download the first time (a few minutes)."
     if [ "$DRY" = 1 ]; then
         say "  plan: sudo apt-get update"
-        say "  plan: sudo apt-get install -y cage chromium pipewire pipewire-pulse wireplumber"
+        say "  plan: sudo apt-get install -y cage chromium pipewire pipewire-pulse wireplumber adwaita-icon-theme"
         say "(dry run - nothing was changed)"
         return
     fi
     as_root env DEBIAN_FRONTEND=noninteractive apt-get update
     # Debian calls the browser chromium; some Pi images call it chromium-browser.
     if apt-cache show chromium >/dev/null 2>&1; then
-        as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y cage chromium pipewire pipewire-pulse wireplumber
+        as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y cage chromium pipewire pipewire-pulse wireplumber adwaita-icon-theme
     else
-        as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y cage chromium-browser pipewire pipewire-pulse wireplumber
+        as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y cage chromium-browser pipewire pipewire-pulse wireplumber adwaita-icon-theme
     fi
     say "Installed. Run it from the Pi's own screen (not SSH):"
     say "  sh tubewing.sh run        (or from the Pi App Store)"
@@ -58,6 +58,8 @@ cmd_run() {
         say "On the Pi: sh tubewing.sh run"
         exit 1
     fi
+    export XCURSOR_THEME=Adwaita
+    export XCURSOR_SIZE=24
     say "Starting tubewing ($URL)"
     say "Leave: press Ctrl+Q, or switch to the console with Ctrl+Alt+F1."
     [ "$DRY" = 1 ] && { say "  plan: pipewire + wireplumber + pipewire-pulse (background)"; say "  plan: exec cage -s -- $BROWSER --kiosk ... $URL"; say "(dry run - nothing was started)"; return; }
@@ -66,6 +68,7 @@ cmd_run() {
     wireplumber >/dev/null 2>&1 &
     pipewire-pulse >/dev/null 2>&1 &
     exec cage -s -- "$BROWSER" \
+        --ozone-platform=wayland \
         --kiosk --no-first-run --no-default-browser-check --noerrdialogs \
         --autoplay-policy=no-user-gesture-required \
         --disable-session-crashed-bubble --hide-crash-restore-bubble \
