@@ -10,7 +10,10 @@ Built with AI assistance from my design.
   console. No HomeOS Plus or PIXEL needed - this is for the normal Home Pi.
 - Zero setup: `install` pulls the packages, `run` starts watching.
 - Sound works on Lite (pipewire is set up for you).
-- A normal mouse cursor (Adwaita arrow) shows in the session; click as usual.
+- First launch asks what you control it with - mouse, keyboard, or touchpad -
+  and remembers the answer (`sh tubewing.sh setup` to change it). Mouse and
+  touchpad get a normal clickable cursor (Adwaita arrow). Keyboard mode uses
+  YouTube's TV layout: arrows move, Enter clicks, Esc goes back.
 - Leaving is safe: press Ctrl+Q (or Ctrl+Alt+F1 for the console). Closing the
   browser ends the session and you land back on your console.
 
