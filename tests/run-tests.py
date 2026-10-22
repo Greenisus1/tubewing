@@ -55,29 +55,86 @@ rc, out = sh(["bogus"])
 check("bad action prints usage", rc == 1 and "install|run" in out)
 
 
-def run_pty(argv, env_extra=None):
+# --- first-launch input wizard -----------------------------------------
+import tempfile
+THOME = tempfile.mkdtemp(prefix="tubewing-test-")
+
+r = subprocess.run(["sh", os.path.join(ROOT, "tubewing.sh"), "setup"],
+                   input="2\n", capture_output=True, text=True,
+                   env={**os.environ, "TUBEWING_HOME": THOME})
+check("setup prints the three choices",
+      "Mouse" in r.stdout and "Keyboard" in r.stdout and "Touchpad" in r.stdout)
+
+r = subprocess.run(["sh", os.path.join(ROOT, "tubewing.sh"), "setup"],
+                   input="2\n", capture_output=True, text=True,
+                   env={**os.environ, "TUBEWING_HOME": THOME,
+                        "SSH_CONNECTION": "", "SSH_TTY": ""})
+check("choosing 2 saves keyboard", "Saved: keyboard" in r.stdout)
+cfg = open(os.path.join(THOME, "tubewing", "config")).read()
+check("config file remembers keyboard", cfg.strip() == "input=keyboard")
+
+r = subprocess.run(["sh", os.path.join(ROOT, "tubewing.sh"), "setup"],
+                   input="3\n", capture_output=True, text=True,
+                   env={**os.environ, "TUBEWING_HOME": THOME})
+check("choosing 3 saves touchpad", "Saved: touchpad" in r.stdout)
+
+r = subprocess.run(["sh", os.path.join(ROOT, "tubewing.sh"), "setup"],
+                   input="\n", capture_output=True, text=True,
+                   env={**os.environ, "TUBEWING_HOME": THOME})
+check("empty answer defaults to mouse", "Saved: mouse" in r.stdout)
+
+rc, out = sh(["--dry-run", "run"], env_extra={"TUBEWING_HOME": THOME,
+                                              "PATH": "/usr/bin:/bin"})
+check("remembered input used (no re-ask)", "Pointer mode (mouse)" in out)
+
+open(os.path.join(THOME, "tubewing", "config"), "w").write("input=keyboard\n")
+rc, out = sh(["--dry-run", "run"], env_extra={"TUBEWING_HOME": THOME,
+                                              "PATH": "/usr/bin:/bin"})
+check("keyboard input selects TV layout", "Keyboard mode" in out
+      and "youtube.com/tv" in out)
+rc, out = sh(["--dry-run", "run", "--tv"], env_extra={"TUBEWING_HOME": THOME,
+                                                      "PATH": "/usr/bin:/bin"})
+check("explicit --tv still wins", "youtube.com/tv" in out)
+
+rc, out = sh(["status"], env_extra={"TUBEWING_HOME": THOME})
+check("status shows remembered input", "input: keyboard" in out)
+
+
+def run_pty(argv, feed=None, env_extra=None, timeout=20):
+    import select
+    import time
     env = dict(os.environ)
     env.pop("SSH_CONNECTION", None)
+    env.pop("SSH_TTY", None)
     if env_extra:
         env.update(env_extra)
-    out = []
-
-    def read(fd):
-        try:
-            data = os.read(fd, 1024)
-        except OSError:
-            return b""
-        out.append(data)
-        return data
-
-    old = dict(os.environ)
-    os.environ.update(env)
+    master, slave = pty.openpty()
+    p = subprocess.Popen(argv, stdin=slave, stdout=slave, stderr=slave,
+                         env=env, close_fds=True)
+    os.close(slave)
+    out = b""
+    if feed is not None:
+        time.sleep(0.5)
+        os.write(master, feed)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r, _w, _x = select.select([master], [], [], 0.5)
+        if r:
+            try:
+                chunk = os.read(master, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            out += chunk
+        elif p.poll() is not None:
+            break
     try:
-        pty.spawn(argv, read)
-    finally:
-        os.environ.clear()
-        os.environ.update(old)
-    return b"".join(out).decode("utf-8", "replace")
+        p.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        p.kill()
+    os.close(master)
+    return out.decode("utf-8", "replace")
 
 
 rc, out = sh(["--dry-run", "run"], env_extra={"PATH": "/usr/bin:/bin"})
@@ -89,9 +146,20 @@ check("cursor theme package is installed",
       "adwaita-icon-theme" in open(os.path.join(ROOT, "tubewing.sh")).read())
 
 txt = run_pty(["sh", os.path.join(ROOT, "tubewing.sh"), "--dry-run", "run"],
-              env_extra={"PATH": "/usr/bin:/bin"})
+              env_extra={"PATH": "/usr/bin:/bin", "TUBEWING_HOME": THOME})
 check("PTY: session plan renders in a terminal", "Starting tubewing" in txt
       and "--kiosk" in txt)
+
+EMPTY_HOME = tempfile.mkdtemp(prefix="tubewing-first-")
+txt = run_pty(["sh", os.path.join(ROOT, "tubewing.sh"), "--dry-run", "run"],
+              feed=b"2\n",
+              env_extra={"PATH": "/usr/bin:/bin", "TUBEWING_HOME": EMPTY_HOME})
+check("PTY: first run asks the input question",
+      "What will you use to control it?" in txt)
+check("PTY: answering 2 plans keyboard save",
+      "plan: save input=keyboard" in txt)
+check("PTY: keyboard answer switches to TV layout plan",
+      "Keyboard mode" in txt and "youtube.com/tv" in txt)
 
 print()
 if FAIL:
