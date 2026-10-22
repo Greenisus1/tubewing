@@ -80,6 +80,14 @@ def run_pty(argv, env_extra=None):
     return b"".join(out).decode("utf-8", "replace")
 
 
+rc, out = sh(["--dry-run", "run"], env_extra={"PATH": "/usr/bin:/bin"})
+check("browser runs Wayland-native (cage cannot host X11)",
+      "--ozone-platform=wayland" in open(os.path.join(ROOT, "tubewing.sh")).read())
+check("cursor theme is set for the session",
+      "XCURSOR_THEME=Adwaita" in open(os.path.join(ROOT, "tubewing.sh")).read())
+check("cursor theme package is installed",
+      "adwaita-icon-theme" in open(os.path.join(ROOT, "tubewing.sh")).read())
+
 txt = run_pty(["sh", os.path.join(ROOT, "tubewing.sh"), "--dry-run", "run"],
               env_extra={"PATH": "/usr/bin:/bin"})
 check("PTY: session plan renders in a terminal", "Starting tubewing" in txt
